@@ -156,6 +156,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px
 <script>
 var API = "https://script.google.com/macros/s/AKfycbylLtZTRi3rCjASukiO-b8Bf6nW3l79x4nSdq4_qRpEjocco3MHYuPomfp7fRE5z919/exec";
 var PW = "";
+var inflight = 0;   // 正在存檔的操作數，期間不自動更新，避免舊資料把卡片又帶回來
 try { PW = localStorage.getItem("csdesk_pw") || ""; } catch (e) {}
 
 function api(action, extra) {
@@ -288,11 +289,13 @@ document.addEventListener("click", function (e) {
   var mark = e.target.closest("[data-mark]");
   if (mark) {
     var mi = items.find(function (x) { return x.uid === mark.dataset.mark; });
-    mark.disabled = true;
-    api("markReplied", { uid: mi.uid }).then(function () {
-      mi.done = true; mi.reply = ""; mi.repliedAt = new Date();
-      render(); toast("已標記 " + mi.name + " 為已回覆");
-    }).catch(function (err) { mark.disabled = false; fail(err, "標記失敗"); });
+    // 先讓卡片消失，後台再慢慢存；失敗才恢復
+    mi.done = true; mi.reply = ""; mi.repliedAt = new Date();
+    render(); toast("已標記 " + mi.name + " 為已回覆");
+    inflight++;
+    api("markReplied", { uid: mi.uid }).catch(function (err) {
+      mi.done = false; render(); fail(err, "標記失敗，已恢復 " + mi.name);
+    }).then(function () { inflight--; });
     return;
   }
   var send = e.target.closest("[data-send]");
@@ -316,10 +319,13 @@ document.addEventListener("input", function (e) {
     if (btn) btn.disabled = !e.target.value.trim();
   }
 });
+var loadSeq = 0;
 function load(silent) {
   if (!PW) { showLogin(); return; }
+  var seq = ++loadSeq, startedInflight = inflight;
   if (silent !== true) document.getElementById("list").innerHTML = '<div class="empty">載入中…</div>';
   api("getData").then(function (j) {
+    if (seq !== loadSeq || inflight > startedInflight) return;   // 讀取途中又有新操作，這份資料已過期
     var d = j.data; NOW = new Date();
     items = d.todo.concat(d.seen, d.done).map(function (r) {
       r.time = new Date(r.time); r.reply = ""; r.repliedAt = null; return r;
@@ -335,6 +341,7 @@ load();
 
 // 自動更新：每 30 秒、或從別的 App 切回來時更新一次；正在輸入回覆時不更新，避免洗掉內容
 function typing() {
+  if (inflight > 0) return true;
   return Array.prototype.some.call(document.querySelectorAll("textarea"), function (t) {
     return t.value.trim() || t === document.activeElement;
   });
