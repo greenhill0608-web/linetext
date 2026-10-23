@@ -316,9 +316,9 @@ document.addEventListener("input", function (e) {
     if (btn) btn.disabled = !e.target.value.trim();
   }
 });
-function load() {
+function load(silent) {
   if (!PW) { showLogin(); return; }
-  document.getElementById("list").innerHTML = '<div class="empty">載入中…</div>';
+  if (silent !== true) document.getElementById("list").innerHTML = '<div class="empty">載入中…</div>';
   api("getData").then(function (j) {
     var d = j.data; NOW = new Date();
     items = d.todo.concat(d.seen, d.done).map(function (r) {
@@ -327,9 +327,19 @@ function load() {
     render();
   }).catch(function (err) {
     if (err.auth) { fail(err); return; }
+    if (silent === true) return;
     document.getElementById("list").innerHTML = '<div class="empty">讀取失敗：' + esc(err.message) + "</div>";
   });
 }
 load();
+
+// 自動更新：每 30 秒、或從別的 App 切回來時更新一次；正在輸入回覆時不更新，避免洗掉內容
+function typing() {
+  return Array.prototype.some.call(document.querySelectorAll("textarea"), function (t) {
+    return t.value.trim() || t === document.activeElement;
+  });
+}
+setInterval(function () { if (!document.hidden && PW && !typing()) load(true); }, 30000);
+document.addEventListener("visibilitychange", function () { if (!document.hidden && PW && !typing()) load(true); });
 </script>
 </body></html>
