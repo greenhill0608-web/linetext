@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>客服回覆台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky header with counts and filter tabs, then a single column of question cards, each with an inline reply box. */
+:root {
+  --bg: #f3f6f6;
+  --surface: #ffffff;
+  --fg: #16292b;
+  --muted: #5d7275;
+  --line: #d9e3e4;
+  --accent: #0f7a78;
+  --accent-fg: #ffffff;
+  --accent-soft: #dff1f0;
+  --alert: #c0261b; --alert-soft: #fde4e1;
+  --warn: #b4551a;
+  --warn-soft: #fbe9dc;
+  --ok: #2c7a4b;
+  --ok-soft: #dff2e6;
+  --font-body: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a1b; --surface: #17262a; --fg: #e4eeee; --muted: #93aaad; --line: #28403f;
+    --accent: #4cc3bf; --accent-fg: #06201f; --accent-soft: #17393a;
+    --alert: #ff8b80; --alert-soft: #43201e; --warn: #f0a36c; --warn-soft: #3a2a1c; --ok: #7fd3a0; --ok-soft: #1b3326;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a1b; --surface: #17262a; --fg: #e4eeee; --muted: #93aaad; --line: #28403f;
+  --accent: #4cc3bf; --accent-fg: #06201f; --accent-soft: #17393a;
+  --alert: #ff8b80; --alert-soft: #43201e; --warn: #f0a36c; --warn-soft: #3a2a1c; --ok: #7fd3a0; --ok-soft: #1b3326;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 640px; margin: 0 auto; }
+header {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); padding-block: 16px 10px; border-bottom: 1px solid var(--line);
+}
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .02em; }
+.sample { font-family: var(--font-mono); font-size: 11px; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.search { margin-top: 10px; }
+.search input {
+  width: 100%; font: inherit; padding: 9px 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); border-radius: 6px;
+}
+.tabs { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.tab {
+  font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 500; }
+.tab b { font-family: var(--font-mono); font-weight: 500; margin-left: 4px; }
+.list { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.card.late { border-color: var(--alert); background: var(--alert-soft); }
+.who { display: flex; align-items: center; gap: 10px; }
+.av {
+  width: 42px; height: 42px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; font-weight: 700; flex: none; overflow: hidden;
+}
+.av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.meta { min-width: 0; flex: 1; }
+.name { font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.copy {
+  font: inherit; font-size: 13px; padding: 5px 10px; cursor: pointer; flex: none; white-space: nowrap;
+  color: var(--accent); background: var(--accent-soft); border: 1px solid transparent; border-radius: 6px;
+}
+.copy.ok { color: var(--ok); background: var(--ok-soft); }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+.pill.late { background: var(--alert); color: var(--bg); font-weight: 500; }
+.pill.done { background: var(--ok-soft); color: var(--ok); }
+.q { white-space: pre-line; margin: 10px 0 8px; padding: 10px 12px; background: var(--bg); border-radius: 6px; overflow-wrap: anywhere; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.tag { font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 1px 8px; border-radius: 4px; }
+.tag.dim { color: var(--muted); background: var(--bg); }
+.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chip {
+  font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; color: var(--fg);
+  background: transparent; border: 1px dashed var(--muted); border-radius: 99px;
+}
+textarea {
+  width: 100%; min-height: 72px; resize: vertical; font: inherit; padding: 10px 12px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px;
+}
+.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.hint { font-size: 12px; color: var(--muted); }
+.send {
+  font: inherit; font-weight: 700; padding: 8px 20px; border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--accent); color: var(--accent-fg);
+}
+.ghost {
+  font: inherit; padding: 8px 14px; cursor: pointer; border-radius: 6px;
+  color: var(--accent); background: transparent; border: 1px solid var(--accent);
+}
+.send:disabled { opacity: .4; cursor: not-allowed; }
+.reply { margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: var(--accent-soft); overflow-wrap: anywhere; }
+.reply small { display: block; font-family: var(--font-mono); color: var(--muted); font-size: 11px; margin-bottom: 2px; }
+.empty { text-align: center; color: var(--muted); padding: 48px 0; }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  background: var(--fg); color: var(--bg); padding: 10px 18px; border-radius: 8px; font-size: 14px; z-index: 20;
+}
+button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .2s; } }
+.login { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: grid; place-items: center; padding: 16px; }
+.login[hidden] { display: none; }
+.login-box { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+.login-box h2 { margin: 0; font-size: 18px; }
+.login-box p { margin: 0; color: var(--muted); font-size: 14px; }
+.login-box input { font: inherit; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; }
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <div class="top">
+      <h1>客服回覆台</h1>
+      <button class="copy" id="refresh">重新整理</button>
+    </div>
+    <div class="search"><input id="q" type="search" placeholder="搜尋客人名稱或問題" aria-label="搜尋"></div>
+    <div class="tabs" role="group" aria-label="篩選">
+      <button class="tab" data-f="todo" aria-pressed="true">待回覆<b id="c-todo">0</b></button>
+      <button class="tab" data-f="menu" aria-pressed="false">列表看得到<b id="c-menu">0</b></button>
+      <button class="tab" data-f="done" aria-pressed="false">已回覆<b id="c-done">0</b></button>
+    </div>
+  </header>
+  <main class="list" id="list"></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div class="login" id="login" hidden>
+  <form class="login-box" id="login-form">
+    <h2>客服回覆台</h2>
+    <p id="login-msg">請輸入密碼</p>
+    <input id="pw" type="password" autocomplete="current-password" aria-label="密碼" required>
+    <button class="send" type="submit">登入</button>
+  </form>
+</div>
+
+<script>
+var API = "https://script.google.com/macros/s/AKfycbylLtZTRi3rCjASukiO-b8Bf6nW3l79x4nSdq4_qRpEjocco3MHYuPomfp7fRE5z919/exec";
+var PW = "";
+try { PW = localStorage.getItem("csdesk_pw") || ""; } catch (e) {}
+
+function api(action, extra) {
+  var body = Object.assign({ action: action, pw: PW }, extra || {});
+  return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body), redirect: "follow" })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { var err = new Error(j.error === "auth" ? "密碼不正確" : j.error); err.auth = j.error === "auth"; throw err; }
+      return j;
+    });
+}
+function showLogin(msg) {
+  document.getElementById("login-msg").textContent = msg || "請輸入密碼";
+  document.getElementById("login").hidden = false;
+  setTimeout(function () { document.getElementById("pw").focus(); }, 50);
+}
+function fail(err, label) {
+  if (err.auth) {
+    PW = ""; try { localStorage.removeItem("csdesk_pw"); } catch (e) {}
+    showLogin("密碼不正確，請重新輸入"); return;
+  }
+  toast((label || "失敗") + "：" + err.message);
+}
+document.getElementById("login-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  PW = document.getElementById("pw").value;
+  try { localStorage.setItem("csdesk_pw", PW); } catch (err) {}
+  document.getElementById("login").hidden = true;
+  document.getElementById("pw").value = "";
+  load();
+});
+
+var NOW = new Date();
+var items = [];
+var quick = ["您好，感謝詢問，我們馬上為您處理。", "預約請點選下方選單「預約野餐」，填寫表單即可。", "請提供日期與人數，我們幫您確認檔期。"];
+var filter = "todo", keyword = "";
+
+function fmt(t) { if (!t) return ""; var p = function (n) { return String(n).padStart(2, "0"); };
+  return p(t.getMonth() + 1) + "/" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes()); }
+function days(t) { return Math.floor((NOW - t) / 86400000); }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+// 未回覆超過兩天的提問直接移除，不再列出
+function live(i) { return i.done || days(i.time) < 2; }
+
+function visible() {
+  return items.filter(function (i) {
+    if (!live(i)) return false;
+    if (filter === "todo" && (i.done || !i.lastTag)) return false;
+    if (filter === "menu" && (i.done || i.lastTag)) return false;
+    if (filter === "done" && !i.done) return false;
+    if (keyword && (i.name + i.text).toLowerCase().indexOf(keyword) < 0) return false;
+    return true;
+  }).sort(function (a, b) { return filter === "done" ? b.time - a.time : a.time - b.time; });
+}
+
+function render() {
+  document.getElementById("c-todo").textContent = items.filter(function (i) { return live(i) && !i.done && i.lastTag; }).length;
+  document.getElementById("c-menu").textContent = items.filter(function (i) { return live(i) && !i.done && !i.lastTag; }).length;
+  document.getElementById("c-done").textContent = items.filter(function (i) { return i.done; }).length;
+  document.querySelectorAll(".tab").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.f === filter); });
+  var list = visible();
+  var el = document.getElementById("list");
+  if (!list.length) { el.innerHTML = '<div class="empty">' + (filter === "done" ? "還沒有回覆紀錄" : "全部回覆完畢") + "</div>"; return; }
+  el.innerHTML = list.map(function (i) {
+    var late = !i.done && days(i.time) >= 1;
+    var head = '<div class="who"><div class="av">' + avatar(i) + '</div><div class="meta"><div class="name">' + esc(i.name) +
+      '</div><div class="time">' + fmt(i.time) + '</div></div>' +
+      '<button class="copy" data-copy="' + esc(i.name) + '" aria-label="複製 ' + esc(i.name) + ' 的 LINE 名稱">複製名稱</button>' +
+      (late ? '<span class="pill late">已等 ' + days(i.time) + ' 天</span>' : "") +
+      (i.done ? '<span class="pill done">已回覆</span>' : "") + "</div>" +
+      '<div class="q">' + esc(i.text) + "</div>";
+    if (i.done) {
+      return '<article class="card">' + head + (i.reply
+        ? '<div class="reply"><small>' + fmt(i.repliedAt) + " 已送出</small>" + esc(i.reply) + "</div></article>"
+        : "</article>");
+    }
+    var tags = '<div class="tags">' + (i.lastTag ? '<span class="tag">最後點了「' + esc(i.last) + '」</span>' : '<span class="tag dim">最後一則：「' + esc(i.last) + '」，LINE 列表看得到</span>') + "</div>";
+    var chips = '<div class="quick">' + quick.map(function (q, n) { return '<button class="chip" data-id="' + i.uid + '" data-q="' + n + '">' + esc(q.slice(0, 10)) + "…</button>"; }).join("") + "</div>";
+    return '<article class="card' + (late ? " late" : "") + '">' + head + tags + chips +
+      '<textarea id="t' + i.uid + '" data-id="' + i.uid + '" placeholder="輸入要回覆的內容" aria-label="回覆 ' + esc(i.name) + '"></textarea>' +
+      '<div class="row"><button class="ghost" data-mark="' + i.uid + '">已在 LINE 回覆</button><button class="send" data-send="' + i.uid + '" disabled>送出</button></div></article>';
+  }).join("");
+}
+
+function avatar(i) {
+  var letter = esc(i.name.charAt(0).toUpperCase());
+  return i.pic ? '<img src="' + esc(i.pic) + '" alt="" data-l="' + letter + '">' : letter;
+}
+document.addEventListener("error", function (e) {
+  var im = e.target;
+  if (im && im.tagName === "IMG" && im.parentNode && im.parentNode.classList.contains("av")) im.parentNode.textContent = im.dataset.l;
+}, true);
+
+function copyName(btn) {
+  var name = btn.dataset.copy;
+  function done() {
+    btn.textContent = "已複製"; btn.classList.add("ok");
+    toast("已複製「" + name + "」，可到 LINE 官方帳號搜尋");
+    setTimeout(function () { btn.textContent = "複製名稱"; btn.classList.remove("ok"); }, 1600);
+  }
+  function fallback() {
+    var ta = document.createElement("textarea");
+    ta.value = name; ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (err) {}
+    document.body.removeChild(ta); done();
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(name).then(done, fallback);
+  } else { fallback(); }
+}
+
+function toast(msg) {
+  var t = document.getElementById("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.h); toast.h = setTimeout(function () { t.hidden = true; }, 2200);
+}
+
+document.addEventListener("click", function (e) {
+  var cp = e.target.closest("[data-copy]");
+  if (cp) { copyName(cp); return; }
+  var tab = e.target.closest(".tab");
+  if (tab) { filter = tab.dataset.f; render(); return; }
+  var chip = e.target.closest(".chip");
+  if (chip) {
+    var ta = document.getElementById("t" + chip.dataset.id);
+    ta.value = quick[+chip.dataset.q]; ta.dispatchEvent(new Event("input", { bubbles: true })); ta.focus(); return;
+  }
+  if (e.target.closest("#refresh")) { load(); return; }
+  var mark = e.target.closest("[data-mark]");
+  if (mark) {
+    var mi = items.find(function (x) { return x.uid === mark.dataset.mark; });
+    mark.disabled = true;
+    api("markReplied", { uid: mi.uid }).then(function () {
+      mi.done = true; mi.reply = ""; mi.repliedAt = new Date();
+      render(); toast("已標記 " + mi.name + " 為已回覆");
+    }).catch(function (err) { mark.disabled = false; fail(err, "標記失敗"); });
+    return;
+  }
+  var send = e.target.closest("[data-send]");
+  if (send) {
+    var id = send.dataset.send, text = document.getElementById("t" + id).value.trim();
+    if (!text) return;
+    var it = items.find(function (x) { return x.uid === id; });
+    send.disabled = true; send.textContent = "送出中…";
+    api("sendReply", { uid: it.uid, text: text }).then(function () {
+      it.done = true; it.reply = text; it.repliedAt = new Date();
+      render(); toast("已送出給 " + it.name);
+    }).catch(function (err) {
+      send.disabled = false; send.textContent = "送出"; fail(err, "送出失敗");
+    });
+  }
+});
+document.addEventListener("input", function (e) {
+  if (e.target.id === "q") { keyword = e.target.value.trim().toLowerCase(); render(); return; }
+  if (e.target.tagName === "TEXTAREA") {
+    var btn = document.querySelector('[data-send="' + e.target.dataset.id + '"]');
+    if (btn) btn.disabled = !e.target.value.trim();
+  }
+});
+function load() {
+  if (!PW) { showLogin(); return; }
+  document.getElementById("list").innerHTML = '<div class="empty">載入中…</div>';
+  api("getData").then(function (j) {
+    var d = j.data; NOW = new Date();
+    items = d.todo.concat(d.seen, d.done).map(function (r) {
+      r.time = new Date(r.time); r.reply = ""; r.repliedAt = null; return r;
+    });
+    render();
+  }).catch(function (err) {
+    if (err.auth) { fail(err); return; }
+    document.getElementById("list").innerHTML = '<div class="empty">讀取失敗：' + esc(err.message) + "</div>";
+  });
+}
+load();
+</script>
+</body></html>
