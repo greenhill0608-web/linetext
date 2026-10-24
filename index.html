@@ -125,6 +125,10 @@ button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px
 .login-box h2 { margin: 0; font-size: 18px; }
 .login-box p { margin: 0; color: var(--muted); font-size: 14px; }
 .login-box input { font: inherit; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; }
+.clear { margin-left: auto; font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  color: var(--alert); background: transparent; border: 1px solid var(--alert); }
+.clear.sure { background: var(--alert); color: var(--bg); font-weight: 500; }
+.clear[hidden] { display: none; }
 </style>
 </head><body>
 
@@ -139,6 +143,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px
       <button class="tab" data-f="todo" aria-pressed="true">待回覆<b id="c-todo">0</b></button>
       <button class="tab" data-f="menu" aria-pressed="false">列表看得到<b id="c-menu">0</b></button>
       <button class="tab" data-f="done" aria-pressed="false">已回覆<b id="c-done">0</b></button>
+      <button class="clear" id="clear-all" hidden></button>
     </div>
   </header>
   <main class="list" id="list"></main>
@@ -219,6 +224,10 @@ function render() {
   document.getElementById("c-done").textContent = items.filter(function (i) { return i.done; }).length;
   document.querySelectorAll(".tab").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.f === filter); });
   var list = visible();
+  var cb = document.getElementById("clear-all");
+  cb.hidden = filter === "done" || !list.length;
+  if (!cb.hidden && !cb.classList.contains("sure")) cb.textContent = "全部清除（" + list.length + "）";
+  if (!cb.hidden && cb.classList.contains("sure")) cb.textContent = "確定清除 " + list.length + " 筆？";
   var el = document.getElementById("list");
   if (!list.length) { el.innerHTML = '<div class="empty">' + (filter === "done" ? "還沒有回覆紀錄" : "全部回覆完畢") + "</div>"; return; }
   el.innerHTML = list.map(function (i) {
@@ -270,6 +279,28 @@ function copyName(btn) {
   } else { fallback(); }
 }
 
+var clearTimer = null;
+function clearAll() {
+  var cb = document.getElementById("clear-all");
+  if (!cb.classList.contains("sure")) {          // 第一下：先請你確認
+    cb.classList.add("sure");
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(function () { cb.classList.remove("sure"); render(); }, 4000);
+    render(); return;
+  }
+  clearTimeout(clearTimer); cb.classList.remove("sure");
+  var list = visible();
+  if (!list.length) { render(); return; }
+  var now = new Date();
+  list.forEach(function (x) { x.done = true; x.reply = ""; x.repliedAt = now; });
+  render(); toast("已清除 " + list.length + " 筆（標為已回覆）");
+  inflight++;
+  api("markMany", { uids: list.map(function (x) { return x.uid; }) }).catch(function (err) {
+    list.forEach(function (x) { x.done = false; });
+    render(); fail(err, "清除失敗，已恢復 " + list.length + " 筆");
+  }).then(function () { inflight--; });
+}
+
 function toast(msg) {
   var t = document.getElementById("toast"); t.textContent = msg; t.hidden = false;
   clearTimeout(toast.h); toast.h = setTimeout(function () { t.hidden = true; }, 2200);
@@ -279,13 +310,14 @@ document.addEventListener("click", function (e) {
   var cp = e.target.closest("[data-copy]");
   if (cp) { copyName(cp); return; }
   var tab = e.target.closest(".tab");
-  if (tab) { filter = tab.dataset.f; render(); return; }
+  if (tab) { filter = tab.dataset.f; document.getElementById("clear-all").classList.remove("sure"); render(); return; }
   var chip = e.target.closest(".chip");
   if (chip) {
     var ta = document.getElementById("t" + chip.dataset.id);
     ta.value = quick[+chip.dataset.q]; ta.dispatchEvent(new Event("input", { bubbles: true })); ta.focus(); return;
   }
   if (e.target.closest("#refresh")) { load(); return; }
+  if (e.target.closest("#clear-all")) { clearAll(); return; }
   var mark = e.target.closest("[data-mark]");
   if (mark) {
     var mi = items.find(function (x) { return x.uid === mark.dataset.mark; });
